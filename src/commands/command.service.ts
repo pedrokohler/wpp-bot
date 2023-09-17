@@ -1,11 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AudioTranscriptionService } from 'src/audio-transcription/audio-transcription.service';
 import { TextArmandizerService } from 'src/text-armandizer/text-armandizer.service';
-import { Chat, Contact, Message, MessageTypes } from 'whatsapp-web.js';
+import {
+  Chat,
+  Client,
+  Contact,
+  Message,
+  MessageTypes,
+  WAState,
+} from 'whatsapp-web.js';
 
 const ME = '553197131929@c.us';
 // const RAFA = '5511916227172@c.us';
 // const GUGA = '553175559189@c.us';
+const BOT_STATUS = '120363153213988815@g.us';
+const VIEW_ONCE = '120363152979623961@g.us';
 // const PENO = '553197011329@c.us';
 const CHAIRS = '553196295683@c.us';
 const GIGA = '553198708663@c.us';
@@ -21,12 +31,16 @@ const SINAIS = '5511989929646-1576764335@g.us';
 const wait = (ms) =>
   new Promise((resolve) => setTimeout(() => resolve(null), ms));
 
+const isViewOnce = (message: Message) =>
+  ((message.rawData as any).isViewOnce as boolean) || false;
+
 @Injectable()
 export class CommandService {
   private logger = new Logger(CommandService.name);
   constructor(
     private textArmandizerService: TextArmandizerService,
     private audioTranscriptionService: AudioTranscriptionService,
+    private configService: ConfigService,
   ) {}
 
   private getCommandFunction(message: Message) {
@@ -54,7 +68,9 @@ export class CommandService {
       await commandFn(message);
     } catch (e) {
       await message.react('❌');
-      await message.reply(`An error ocurred: ${e.message}`);
+      await message.reply(`An error ocurred: ${e.message}`, undefined, {
+        sendSeen: false,
+      });
     }
   }
 
@@ -77,7 +93,7 @@ export class CommandService {
     this.logger.log(`BODY: ${message.body}`);
   }
 
-  public async runMessageCreatedTriggers(message: Message) {
+  public async runMessageCreatedTriggers(message: Message, client: Client) {
     try {
       const chat = await message.getChat();
       const contact = await message.getContact();
@@ -87,24 +103,60 @@ export class CommandService {
       this.reactWithEmojis({
         person: GIGA,
         name: 'GIGA',
-        reactions: ['🔁', '🕊️'],
+        reactions: ['🔁', '🕊️', ''],
         message,
-        delayBetweenReactions: 500,
+        delayBetweenReactions: 1000,
       });
 
       this.reactWithEmojis({
         person: CHAIRS,
         name: 'CHAIRS',
-        reactions: ['🪑'],
+        reactions: ['🪑', ''],
         message,
-        delayBetweenReactions: 1,
+        delayBetweenReactions: 2000,
       });
 
       this.autoTranscribePrivateAudios({ message, chat, contact });
       this.autoTranscribeWhitelistedGroupAudios({ message, chat, contact });
+      this.forwardViewOnceMedia({ message, client });
     } catch (e) {
       this.logger.error(e);
     }
+  }
+
+  private async forwardViewOnceMedia({
+    message,
+    client,
+  }: {
+    message: Message;
+    client: Client;
+  }) {
+    if (isViewOnce(message)) {
+      const chat = await client.getChatById(VIEW_ONCE);
+      const media = await message.downloadMedia();
+      await chat.sendMessage(media);
+      await chat.markUnread();
+    }
+  }
+
+  public async notifyBotStatus({
+    client,
+    status,
+    message,
+  }: {
+    client: Client;
+    status: WAState;
+    message: string;
+  }) {
+    const emoji = status !== WAState.CONNECTED ? '❌' : '✅';
+    const chat = await client.getChatById(BOT_STATUS);
+    await chat.sendMessage(
+      `${emoji} ${message} (env: ${this.configService.get<string>(
+        'NODE_ENV',
+      )})`,
+    );
+    await chat.markUnread();
+    await chat.pin();
   }
 
   private async autoTranscribePrivateAudios({
@@ -237,8 +289,14 @@ export class CommandService {
   };
 
   private pingCommand(message: Message) {
-    const delay = (Date.now() / 1000 - message.timestamp + 500) * 1000;
-    message.reply(`pong took approximately ${delay.toFixed(0)}ms ± 500ms`);
+    const delay = (Date.now() / 1000 - message.timestamp + 0.5) * 1000;
+    message.reply(
+      `pong took approximately ${delay.toFixed(0)} ± 500ms`,
+      undefined,
+      {
+        sendSeen: false,
+      },
+    );
   }
 
   private async getTargetMessage(message: Message) {
@@ -257,7 +315,9 @@ export class CommandService {
       targetMessage.body,
     );
 
-    message.reply(processedText);
+    message.reply(processedText, undefined, {
+      sendSeen: false,
+    });
   }
 
   private async createStickerCommand(message: Message) {
@@ -274,6 +334,7 @@ export class CommandService {
 
     targetMessage.reply(undefined, undefined, {
       sendMediaAsSticker: true,
+      sendSeen: false,
       media: await targetMessage.downloadMedia(),
     });
   }
@@ -312,6 +373,8 @@ export class CommandService {
 
     const transcription = await this.transcribeAudio(quotedMessage);
 
-    message.reply(transcription);
+    message.reply(transcription, undefined, {
+      sendSeen: false,
+    });
   }
 }

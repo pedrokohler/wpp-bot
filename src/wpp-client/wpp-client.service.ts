@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Client, LocalAuth, Message, RemoteAuth } from 'whatsapp-web.js';
+import {
+  Client,
+  LocalAuth,
+  Message,
+  RemoteAuth,
+  WAState,
+} from 'whatsapp-web.js';
 import { CommandService } from 'src/commands/command.service';
 import { ConfigService } from '@nestjs/config';
 import mongoose, { Connection } from 'mongoose';
@@ -15,6 +21,11 @@ export class WppClientService {
     private commandService: CommandService,
     @InjectConnection() private connection: Connection,
   ) {
+    this.logger.log(
+      `PUPPETEER_EXECUTABLE_PATH: ${configService.get<string>(
+        'PUPPETEER_EXECUTABLE_PATH',
+      )}`,
+    );
     const store = new MongoStore({ mongoose: { ...mongoose, connection } });
     this.client = new Client({
       authStrategy:
@@ -27,6 +38,7 @@ export class WppClientService {
       puppeteer: {
         executablePath: configService.get<string>('PUPPETEER_EXECUTABLE_PATH'),
         args: ['--no-sandbox'],
+        // headless: false,
       },
     });
 
@@ -42,18 +54,38 @@ export class WppClientService {
 
     this.client.on('ready', () => {
       this.logger.log('Client is ready!');
+      this.commandService.notifyBotStatus({
+        client: this.client,
+        status: WAState.CONNECTED,
+        message: 'Bot is ready.',
+      });
     });
 
     this.client.on('auth_failure', (message) => {
       this.logger.error('Auth failure', message);
+      this.commandService.notifyBotStatus({
+        client: this.client,
+        status: WAState.UNLAUNCHED,
+        message: `${message} at ${new Date().toTimeString()}`,
+      });
     });
 
     this.client.on('change_state', (state) => {
       this.logger.warn('State changed', state);
+      this.commandService.notifyBotStatus({
+        client: this.client,
+        status: state,
+        message: `Changed state to ${state} at ${new Date().toTimeString()}.`,
+      });
     });
 
     this.client.on('disconnected', (reason) => {
       this.logger.error('Disconnected', reason);
+      this.commandService.notifyBotStatus({
+        client: this.client,
+        status: WAState.UNPAIRED,
+        message: `Bot disconnected ${new Date().toTimeString()}.`,
+      });
     });
 
     this.client.on('message_create', this.handleMessageCreate.bind(this));
@@ -62,8 +94,12 @@ export class WppClientService {
   }
 
   private async handleMessageCreate(message: Message) {
-    await this.commandService.runMessageCreatedTriggers(message);
+    await this.commandService.runMessageCreatedTriggers(message, this.client);
     await this.commandService.runCommand(message);
+  }
+
+  public async sendMessage({ chatId, content }) {
+    await this.client.sendMessage(chatId, content, { sendSeen: false });
   }
 
   public async onModuleDestroy() {
