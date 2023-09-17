@@ -40,3 +40,5 @@ lerna-debug.log*
 
 # Env var files
 .env
+
+blocklist.json

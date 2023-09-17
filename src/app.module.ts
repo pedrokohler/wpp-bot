@@ -10,9 +10,11 @@ import { WppClientModule } from './wpp-client/wpp-client.module';
 import { AudioTranscriptionModule } from './audio-transcription/audio-transcription.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { RealEstateMonitorModule } from './real-estate-monitor/monitor.module';
 
 @Module({
   imports: [
+    RealEstateMonitorModule,
     CommandModule,
     TextArmandizerModule,
     UtilsModule,

@@ -11,15 +11,19 @@ import {
   WAState,
 } from 'whatsapp-web.js';
 
-const ME = '553197131929@c.us';
+export const ME = '553197131929@c.us';
 // const RAFA = '5511916227172@c.us';
 // const GUGA = '553175559189@c.us';
+// const PENO = '553197011329@c.us';
+// const CHAIRS = '553196295683@c.us';
+// const GIGA = '553198708663@c.us';
+// const CONTADOR_ANCAP = '553192960772@c.us';
+// const COLOMBIA = '553198648535@c.us';
+
+export const CO_WORKING = '120363030514613873@g.us';
 const BOT_STATUS = '120363153213988815@g.us';
 const VIEW_ONCE = '120363152979623961@g.us';
-// const PENO = '553197011329@c.us';
-const CHAIRS = '553196295683@c.us';
-const GIGA = '553198708663@c.us';
-const SLEEP = '553192264220-1570192011@g.us';
+export const SLEEP = '553192264220-1570192011@g.us';
 // const LIB_DEVS = '5511989784605-1570726812@g.us';
 const BRUXAO = '553175733236-1578264676@g.us';
 // const MINHA_CONVERSA = '553197131929-1529539375@g.us';
@@ -27,6 +31,7 @@ const EVERY_MONDAY = '120363026953756950@g.us';
 const CUIDADOS_VO = '120363045186217095@g.us';
 const FAMILIA_MARRA = '553184853596-1424691550@g.us';
 const SINAIS = '5511989929646-1576764335@g.us';
+// const CHESS_1e4 = '120363045419364334@g.us';
 
 const wait = (ms) =>
   new Promise((resolve) => setTimeout(() => resolve(null), ms));
@@ -99,22 +104,6 @@ export class CommandService {
       const contact = await message.getContact();
 
       this.logMessageInfo({ message, chat, contact });
-
-      this.reactWithEmojis({
-        person: GIGA,
-        name: 'GIGA',
-        reactions: ['🔁', '🕊️', ''],
-        message,
-        delayBetweenReactions: 1000,
-      });
-
-      this.reactWithEmojis({
-        person: CHAIRS,
-        name: 'CHAIRS',
-        reactions: ['🪑', ''],
-        message,
-        delayBetweenReactions: 2000,
-      });
 
       this.autoTranscribePrivateAudios({ message, chat, contact });
       this.autoTranscribeWhitelistedGroupAudios({ message, chat, contact });
@@ -332,10 +321,12 @@ export class CommandService {
       throw new Error(`Invalid message type "${targetMessage.type}"`);
     }
 
-    targetMessage.reply(undefined, undefined, {
+    const media = await targetMessage.downloadMedia();
+
+    message.reply(undefined, undefined, {
       sendMediaAsSticker: true,
       sendSeen: false,
-      media: await targetMessage.downloadMedia(),
+      media,
     });
   }
 
