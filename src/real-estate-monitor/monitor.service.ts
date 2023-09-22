@@ -46,6 +46,19 @@ export class RealEstateMonitorService {
     }
   }
 
+  private async notifyEmail({ title, body }) {
+    try {
+      this.emailService.sendEmail({
+        title,
+        body,
+      });
+    } catch (e) {
+      this.logger.error(`Failed to send email`);
+      this.logger.error(e);
+      throw e;
+    }
+  }
+
   private async notifyAll(newOpportunities) {
     const notificationTitle = `${
       newOpportunities.length
@@ -60,16 +73,22 @@ export class RealEstateMonitorService {
       .trim();
 
     this.logger.log('Sending notifications...');
-    await Promise.all([
+    await Promise.any([
       ...[SLEEP, ME].map(async (chatId) => {
-        await this.wppService.sendMessage({
-          chatId,
-          content: `*Nova(s) oportunidade(s) encontrada(s):*\n        ${notificationBody}`,
-        });
-        const chat = await this.wppService.client.getChatById(chatId);
-        await chat.markUnread();
+        try {
+          await this.wppService.sendMessage({
+            chatId,
+            content: `*Nova(s) oportunidade(s) encontrada(s):*\n        ${notificationBody}`,
+          });
+          const chat = await this.wppService.client.getChatById(chatId);
+          await chat.markUnread();
+        } catch (e) {
+          this.logger.log(`Failed to notify whatsapp ${chatId}`);
+          this.logger.error(e);
+          throw e;
+        }
       }),
-      this.emailService.sendEmail({
+      this.notifyEmail({
         title: notificationTitle,
         body: `        ${notificationBody}`,
       }),
