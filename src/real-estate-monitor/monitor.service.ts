@@ -27,17 +27,23 @@ export class RealEstateMonitorService {
       const intervalInSeconds = 60 * Math.random() + 60;
       await waitForMs(1000 * intervalInSeconds);
     } catch (e) {
-      this.logger.error(e);
-      this.emailService.sendEmail({
-        title: 'An error ocurred in your application',
-        body: `Time: ${new Date().toTimeString()}
+      this.logger.error(`An error ocurred while polling: ${e.message}`);
+      this.emailService
+        .sendEmail({
+          title: 'An error ocurred in your application',
+          body: `Time: ${new Date().toTimeString()}
         ${e.message}
         ${JSON.stringify(e, null, 2)}
         `,
-      });
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Error while notifying application error: ${error.message}`,
+          ),
+        );
+    } finally {
+      this.setContinuousPolling();
     }
-
-    this.setContinuousPolling();
   }
 
   private async notifyAll(newOpportunities) {
@@ -53,28 +59,37 @@ export class RealEstateMonitorService {
       )
       .trim();
 
-    this.logger.log('Sending email...');
-    await this.emailService.sendEmail({
-      title: notificationTitle,
-      body: `        ${notificationBody}`,
-    });
-
-    [SLEEP, ME].forEach(async (chatId) => {
-      await this.wppService.sendMessage({
-        chatId,
-        content: `*Nova(s) oportunidade(s) encontrada(s):*\n        ${notificationBody}`,
-      });
-      const chat = await this.wppService.client.getChatById(chatId);
-      await chat.markUnread();
-    });
+    this.logger.log('Sending notifications...');
+    await Promise.all([
+      ...[SLEEP, ME].map(async (chatId) => {
+        await this.wppService.sendMessage({
+          chatId,
+          content: `*Nova(s) oportunidade(s) encontrada(s):*\n        ${notificationBody}`,
+        });
+        const chat = await this.wppService.client.getChatById(chatId);
+        await chat.markUnread();
+      }),
+      this.emailService.sendEmail({
+        title: notificationTitle,
+        body: `        ${notificationBody}`,
+      }),
+    ]);
   }
 
   private async pollFromClient() {
     this.logger.log('Started polling...');
-    const newOpportunities = await this.checkNewOpportunities();
+    this.logger.log(`Fetching blocklist...`);
+    const blocklist = await this.getBlockList();
+    const newOpportunities = await this.checkNewOpportunities(blocklist);
 
     if (newOpportunities.length > 0) {
-      this.notifyAll(newOpportunities);
+      await this.notifyAll(newOpportunities);
+
+      this.logger.log(`Saving blocklist...`);
+      await this.saveBlockList([
+        ...blocklist,
+        ...newOpportunities.map((opportunity) => opportunity.id),
+      ]);
     } else {
       this.logger.log('No opportunities found.');
     }
@@ -110,7 +125,7 @@ export class RealEstateMonitorService {
     });
   }
 
-  async checkNewOpportunities() {
+  async checkNewOpportunities(blocklist: string[]) {
     const neighborhoodsOfInterest = [
       'São Pedro',
       'Savassi',
@@ -124,16 +139,14 @@ export class RealEstateMonitorService {
       'Prado',
     ];
 
-    this.logger.log(`Fetching blocklist...`);
-    const blocklist = await this.getBlockList();
-
+    const updatedBlocklist = [...blocklist];
     const results = [];
 
     for (const neighborhood of neighborhoodsOfInterest) {
       this.logger.log(`Polling for ${neighborhood}...`);
       const response = await this.fetchRealEstateOpportunities(
         neighborhood,
-        blocklist,
+        updatedBlocklist,
       );
 
       const neighborhoodResults = this.extractResults(response);
@@ -141,15 +154,12 @@ export class RealEstateMonitorService {
       neighborhoodResults.forEach((result) => {
         this.logger.log(`Found ${result.id}`);
         results.push(result);
-        blocklist.push(result.id);
+        updatedBlocklist.push(result.id);
       });
 
       const interval = 5000 * Math.random();
       await waitForMs(interval);
     }
-
-    this.logger.log(`Saving blocklist...`);
-    await this.saveBlockList(blocklist);
 
     return results;
   }

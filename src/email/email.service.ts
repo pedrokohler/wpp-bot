@@ -4,6 +4,10 @@ import * as nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'googleapis-common';
 
+interface AccessToken {
+  expiresAt: number;
+  token: string;
+}
 @Injectable()
 export class EmailService {
   private emailProviderUser: string;
@@ -13,6 +17,7 @@ export class EmailService {
 
   private emailProvider: any;
   private oAuth2Client: OAuth2Client;
+  private accessToken: AccessToken;
 
   constructor(private readonly configService: ConfigService) {
     this.emailProvider = nodemailer;
@@ -37,7 +42,48 @@ export class EmailService {
     });
   }
 
+  private async updateAccessToken() {
+    const response = await this.oAuth2Client.getAccessToken();
+    this.accessToken = {
+      token: response.token,
+      expiresAt: response.res.data.expiry_date,
+    };
+
+    const refreshToken = response.res.data.refresh_token;
+
+    if (refreshToken && refreshToken !== this.emailProviderRefreshToken) {
+      console.log(
+        "🚀 ~ file: email.service.ts:60 ~ EmailService ~ getAccessToken ~ IT'S A NEW REFRESH TOKEN",
+        refreshToken,
+      );
+      this.oAuth2Client.setCredentials({
+        refresh_token: refreshToken,
+      });
+
+      await this.sendEmail({
+        title: 'App refresh token changed',
+        body: `
+      Old refresh token: ${this.emailProviderRefreshToken}
+      New refresh token: ${refreshToken}.
+      Make sure to update it on your .env file.
+      `,
+      });
+    }
+  }
+
+  private async getAccessToken() {
+    if (
+      !this.accessToken?.token ||
+      Date.now() > this.accessToken?.expiresAt - 10_000
+    ) {
+      await this.updateAccessToken();
+    }
+
+    return this.accessToken.token;
+  }
+
   private async createTransport() {
+    const accessToken = await this.getAccessToken();
     return this.emailProvider.createTransport({
       service: 'gmail',
       auth: {
@@ -46,7 +92,7 @@ export class EmailService {
         clientId: this.emailProviderClientId,
         clientSecret: this.emailProviderClientSecret,
         refreshToken: this.emailProviderRefreshToken,
-        accessToken: await this.oAuth2Client.getAccessToken(),
+        accessToken,
       },
     });
   }

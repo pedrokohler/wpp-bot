@@ -7,6 +7,8 @@ import {
   Client,
   Contact,
   Message,
+  MessageContent,
+  MessageSendOptions,
   MessageTypes,
   WAState,
 } from 'whatsapp-web.js';
@@ -33,8 +35,8 @@ const FAMILIA_MARRA = '553184853596-1424691550@g.us';
 const SINAIS = '5511989929646-1576764335@g.us';
 // const CHESS_1e4 = '120363045419364334@g.us';
 
-const wait = (ms) =>
-  new Promise((resolve) => setTimeout(() => resolve(null), ms));
+// const wait = (ms) =>
+//   new Promise((resolve) => setTimeout(() => resolve(null), ms));
 
 const isViewOnce = (message: Message) =>
   ((message.rawData as any).isViewOnce as boolean) || false;
@@ -65,21 +67,34 @@ export class CommandService {
     return commandMap.get(matchingCommand)?.bind(this);
   }
 
-  public async runCommand(message: Message): Promise<void> {
+  public async runCommand(message: Message, client: Client): Promise<void> {
     const commandFn = this.getCommandFunction(message);
     if (!commandFn) return;
+    const chat = await message.getChat();
     try {
       await message.react('✅');
-      await commandFn(message);
+      await commandFn(message, client);
     } catch (e) {
-      await message.react('❌');
-      await message.reply(`An error ocurred: ${e.message}`, undefined, {
-        sendSeen: false,
+      message
+        .react('❌')
+        .catch((e) =>
+          this.logger.error(`Failed to react to message: ${e.message}`),
+        );
+      await this.safeReplyToMessage({
+        message,
+        client,
+        replyArgs: {
+          content: `An error ocurred: ${e.message}`,
+          chatId: chat.id._serialized,
+          options: {
+            sendSeen: false,
+          },
+        },
       });
     }
   }
 
-  public async logMessageInfo({
+  public logMessageInfo({
     message,
     contact,
     chat,
@@ -104,10 +119,19 @@ export class CommandService {
       const contact = await message.getContact();
 
       this.logMessageInfo({ message, chat, contact });
-
-      this.autoTranscribePrivateAudios({ message, chat, contact });
-      this.autoTranscribeWhitelistedGroupAudios({ message, chat, contact });
-      this.forwardViewOnceMedia({ message, client });
+      await this.autoTranscribePrivateAudios({
+        message,
+        chat,
+        contact,
+        client,
+      });
+      await this.autoTranscribeWhitelistedGroupAudios({
+        message,
+        chat,
+        contact,
+        client,
+      });
+      await this.forwardViewOnceMedia({ message, client });
     } catch (e) {
       this.logger.error(e);
     }
@@ -145,26 +169,72 @@ export class CommandService {
       )})`,
     );
     await chat.markUnread();
-    await chat.pin();
   }
 
   private async autoTranscribePrivateAudios({
     message,
     contact,
     chat,
+    client,
   }: {
     message: Message;
     contact: Contact;
     chat: Chat;
+    client: Client;
   }) {
     if (
       chat.id.user === contact.id.user &&
       [MessageTypes.AUDIO, MessageTypes.VOICE].includes(message.type)
     ) {
       const transcription = await this.transcribeAudio(message);
-      message.reply(`*Transcrição automática:* ${transcription}`, undefined, {
-        sendSeen: false,
+
+      await this.safeReplyToMessage({
+        message,
+        client,
+        replyArgs: {
+          content: `*Transcrição automática:* ${transcription}`,
+          chatId: chat.id._serialized,
+          options: {
+            sendSeen: false,
+          },
+        },
       });
+    }
+  }
+
+  private async safeReplyToMessage({
+    message,
+    client,
+    replyArgs,
+  }: {
+    message: Message;
+    client: Client;
+    replyArgs: {
+      content?: MessageContent;
+      chatId: string;
+      options?: MessageSendOptions;
+    };
+  }) {
+    const { chatId, content, options } = replyArgs;
+
+    try {
+      const originalMessage = await client.getMessageById(
+        message.id._serialized,
+      );
+
+      this.logger.log(`The original message still exists`);
+      await originalMessage.reply(content, chatId, options);
+      return;
+    } catch (error) {
+      this.logger.error(error);
+      this.logger.log(
+        `Couldn't reply to original message. Replying to chat instead.`,
+      );
+      await client.sendMessage(
+        chatId,
+        `*AVISO:* A mensagem de ${message.from} que gerou a *resposta automática* abaixo não foi encontrada para que fosse marcada.`,
+      );
+      await client.sendMessage(chatId, content, options);
     }
   }
 
@@ -172,10 +242,12 @@ export class CommandService {
     message,
     // contact,
     chat,
+    client,
   }: {
     message: Message;
     contact: Contact;
     chat: Chat;
+    client: Client;
   }) {
     const groupWhitelist = [
       EVERY_MONDAY,
@@ -191,48 +263,18 @@ export class CommandService {
       [MessageTypes.AUDIO, MessageTypes.VOICE].includes(message.type)
     ) {
       const transcription = await this.transcribeAudio(message);
-      message.reply(`*Transcrição automática:* ${transcription}`, undefined, {
-        sendSeen: false,
+
+      await this.safeReplyToMessage({
+        message,
+        client,
+        replyArgs: {
+          content: `*Transcrição automática:* ${transcription}`,
+          chatId: chat.id._serialized,
+          options: {
+            sendSeen: false,
+          },
+        },
       });
-    }
-  }
-
-  // private replyToPersonMessages({
-  //   person,
-  //   name,
-  //   response,
-  //   message,
-  // }: {
-  //   person: string;
-  //   name?: string;
-  //   response: string;
-  //   message: Message;
-  // }) {
-  //   if (this.isMessageSender({ person, message })) {
-  //     this.logger.log(`Responding to ${name}`);
-  //     message.reply(response, undefined, { sendSeen: false });
-  //   }
-  // }
-
-  private async reactWithEmojis({
-    person,
-    name,
-    reactions,
-    message,
-    delayBetweenReactions,
-  }: {
-    person: string;
-    name?: string;
-    reactions: string[];
-    message: Message;
-    delayBetweenReactions: number;
-  }) {
-    if (this.isMessageSender({ person, message })) {
-      this.logger.log(`Reacting to ${name}`);
-      for (let i = 0; i < reactions.length; i++) {
-        await message.react(reactions[i]);
-        await wait(delayBetweenReactions);
-      }
     }
   }
 
@@ -277,9 +319,9 @@ export class CommandService {
     return chat.name;
   };
 
-  private pingCommand(message: Message) {
+  private async pingCommand(message: Message) {
     const delay = (Date.now() / 1000 - message.timestamp + 0.5) * 1000;
-    message.reply(
+    await message.reply(
       `pong took approximately ${delay.toFixed(0)} ± 500ms`,
       undefined,
       {
@@ -304,18 +346,19 @@ export class CommandService {
       targetMessage.body,
     );
 
-    message.reply(processedText, undefined, {
+    await message.reply(processedText, undefined, {
       sendSeen: false,
     });
   }
 
-  private async createStickerCommand(message: Message) {
+  private async createStickerCommand(message: Message, client: Client) {
     const validTypes = [
       MessageTypes.IMAGE,
       MessageTypes.STICKER,
       MessageTypes.VIDEO,
     ];
     const targetMessage = await this.getTargetMessage(message);
+    const chat = await targetMessage.getChat();
 
     if (!validTypes.includes(targetMessage.type)) {
       throw new Error(`Invalid message type "${targetMessage.type}"`);
@@ -323,10 +366,17 @@ export class CommandService {
 
     const media = await targetMessage.downloadMedia();
 
-    message.reply(undefined, undefined, {
-      sendMediaAsSticker: true,
-      sendSeen: false,
-      media,
+    await this.safeReplyToMessage({
+      message,
+      client,
+      replyArgs: {
+        chatId: chat.id._serialized,
+        options: {
+          sendMediaAsSticker: true,
+          sendSeen: false,
+          media,
+        },
+      },
     });
   }
 
@@ -340,7 +390,7 @@ export class CommandService {
     return transcription;
   }
 
-  private async transcribeAudioCommand(message: Message) {
+  private async transcribeAudioCommand(message: Message, client: Client) {
     const whitelistedPeople = [ME];
     if (
       !whitelistedPeople.some((person) =>
@@ -349,11 +399,13 @@ export class CommandService {
     ) {
       throw new Error('User not authorized.');
     }
+
     const validTypes = [MessageTypes.AUDIO, MessageTypes.VOICE];
     if (!message.hasQuotedMsg) {
       throw new Error('You must quote a message.');
     }
 
+    const chat = await message.getChat();
     const quotedMessage = await message.getQuotedMessage();
 
     if (!validTypes.includes(quotedMessage.type)) {
@@ -364,8 +416,16 @@ export class CommandService {
 
     const transcription = await this.transcribeAudio(quotedMessage);
 
-    message.reply(transcription, undefined, {
-      sendSeen: false,
+    await this.safeReplyToMessage({
+      message,
+      client,
+      replyArgs: {
+        chatId: chat.id._serialized,
+        content: transcription,
+        options: {
+          sendSeen: false,
+        },
+      },
     });
   }
 }

@@ -95,7 +95,7 @@ export class WppClientService {
 
   private async handleMessageCreate(message: Message) {
     await this.commandService.runMessageCreatedTriggers(message, this.client);
-    await this.commandService.runCommand(message);
+    await this.commandService.runCommand(message, this.client);
   }
 
   public async sendMessage({ chatId, content }) {
