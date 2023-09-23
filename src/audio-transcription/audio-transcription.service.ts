@@ -4,7 +4,6 @@ import OpenAI from 'openai';
 import * as FfmpegCommand from 'fluent-ffmpeg';
 import { writeFile, unlink } from 'node:fs/promises';
 import { createReadStream, existsSync, mkdirSync } from 'node:fs';
-// import speech, { v2 } from '@google-cloud/speech';
 
 @Injectable()
 export class AudioTranscriptionService {

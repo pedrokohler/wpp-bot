@@ -11,6 +11,7 @@ import { AudioTranscriptionModule } from './audio-transcription/audio-transcript
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RealEstateMonitorModule } from './real-estate-monitor/monitor.module';
+import { YoutubeModule } from './youtube/youtube.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RealEstateMonitorModule } from './real-estate-monitor/monitor.module';
       }),
       inject: [ConfigService],
     }),
+    YoutubeModule,
   ],
   controllers: [AppController],
   providers: [AppService, TextArmandizerService, UtilsService],

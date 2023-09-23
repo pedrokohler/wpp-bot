@@ -2,12 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AudioTranscriptionService } from 'src/audio-transcription/audio-transcription.service';
 import { TextArmandizerService } from 'src/text-armandizer/text-armandizer.service';
+import { YoutubeService } from 'src/youtube/youtube.service';
 import {
   Chat,
   Client,
   Contact,
   Message,
   MessageContent,
+  MessageMedia,
   MessageSendOptions,
   MessageTypes,
   WAState,
@@ -46,6 +48,7 @@ export class CommandService {
   private logger = new Logger(CommandService.name);
   constructor(
     private textArmandizerService: TextArmandizerService,
+    private youtubeService: YoutubeService,
     private audioTranscriptionService: AudioTranscriptionService,
     private configService: ConfigService,
   ) {}
@@ -56,6 +59,7 @@ export class CommandService {
       [['armandize', 'a'], this.armandizeCommand.bind(this)],
       [['sticker', 's'], this.createStickerCommand.bind(this)],
       [['transcribe', 't'], this.transcribeAudioCommand.bind(this)],
+      [['youtube', 'yt'], this.downloadYoutubeVideo.bind(this)],
     ]);
 
     const matchingCommand = Array.from(commandMap.keys()).find((aliases) => {
@@ -279,7 +283,7 @@ export class CommandService {
   }
 
   private checkMatchingAlias({ message, alias }) {
-    const regex = new RegExp(`^!${alias}(\s.*|$)`);
+    const regex = new RegExp(`^!${alias}( .{1,}|$)`);
     return regex.test(message.body);
   }
 
@@ -427,5 +431,39 @@ export class CommandService {
         },
       },
     });
+  }
+
+  private async downloadYoutubeVideo(message: Message, client: Client) {
+    const whitelistedPeople = [ME];
+    if (
+      !whitelistedPeople.some((person) =>
+        this.isMessageSender({ person, message }),
+      )
+    ) {
+      throw new Error('User not authorized.');
+    }
+
+    const validTypes = [MessageTypes.TEXT];
+
+    if (!validTypes.includes(message.type)) {
+      throw new Error(
+        `Invalid message type "${message.type}". Message must be a url to an youtube video.`,
+      );
+    }
+
+    const chat = await message.getChat();
+    const videoPath = await this.youtubeService.downloadVideo(message.body);
+
+    await this.safeReplyToMessage({
+      message,
+      client,
+      replyArgs: {
+        chatId: chat.id._serialized,
+        content: MessageMedia.fromFilePath(videoPath as string),
+        options: { sendMediaAsDocument: false },
+      },
+    });
+
+    await this.youtubeService.deleteVideo(videoPath);
   }
 }
