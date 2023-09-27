@@ -72,11 +72,6 @@ export class WppClientService {
 
     this.client.on('change_state', (state) => {
       this.logger.warn('State changed', state);
-      this.commandService.notifyBotStatus({
-        client: this.client,
-        status: state,
-        message: `Changed state to ${state} at ${new Date().toTimeString()}.`,
-      });
     });
 
     this.client.on('disconnected', (reason) => {

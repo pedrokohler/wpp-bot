@@ -27,20 +27,27 @@ export class RealEstateMonitorService {
       const intervalInSeconds = 60 * Math.random() + 60;
       await waitForMs(1000 * intervalInSeconds);
     } catch (e) {
-      this.logger.error(`An error ocurred while polling: ${e.message}`);
-      this.emailService
-        .sendEmail({
-          title: 'An error ocurred in your application',
-          body: `Time: ${new Date().toTimeString()}
-        ${e.message}
-        ${JSON.stringify(e, null, 2)}
-        `,
-        })
-        .catch((error) =>
-          this.logger.error(
-            `Error while notifying application error: ${error.message}`,
-          ),
-        );
+      const unimportantErrorPatterns = [
+        /Unexpected token < in JSON at position 0/i,
+        /fetch failed/i,
+      ];
+      const message = e.message;
+      this.logger.error(`An error ocurred while polling: ${message}`);
+      if (unimportantErrorPatterns.every((pattern) => !pattern.test(message))) {
+        await this.emailService
+          .sendEmail({
+            title: 'An error ocurred in your application',
+            body: `Time: ${new Date().toTimeString()}
+          ${message}
+          ${JSON.stringify(e, null, 2)}
+          `,
+          })
+          .catch((error) =>
+            this.logger.error(
+              `Error while notifying application error: ${error.message}`,
+            ),
+          );
+      }
     } finally {
       this.setContinuousPolling();
     }
