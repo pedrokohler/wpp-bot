@@ -66,7 +66,8 @@ export class CommandService {
       [['armandize', 'a'], this.armandizeCommand.bind(this)],
       [['sticker', 's'], this.createStickerCommand.bind(this)],
       [['transcribe', 't'], this.transcribeAudioCommand.bind(this)],
-      [['youtube', 'yt'], this.downloadYoutubeVideo.bind(this)],
+      [['youtube', 'yt'], this.downloadYoutubeVideoCommand.bind(this)],
+      [['chat', 'c'], this.chatWithAiCommand.bind(this)],
     ]);
 
     const matchingCommand = Array.from(commandMap.keys()).find((aliases) => {
@@ -475,7 +476,7 @@ export class CommandService {
     });
   }
 
-  private async downloadYoutubeVideo(message: Message, client: Client) {
+  private async downloadYoutubeVideoCommand(message: Message, client: Client) {
     const whitelistedPeople = [ME];
     if (
       !whitelistedPeople.some((person) =>
@@ -502,10 +503,45 @@ export class CommandService {
       replyArgs: {
         chatId: chat.id._serialized,
         content: MessageMedia.fromFilePath(videoPath as string),
-        options: { sendMediaAsDocument: false },
+        options: { sendMediaAsDocument: false, sendSeen: false },
       },
     });
 
     await this.youtubeService.deleteVideo(videoPath);
+  }
+  private async chatWithAiCommand(message: Message, client: Client) {
+    const whitelistedPeople = [ME];
+    if (
+      !whitelistedPeople.some((person) =>
+        this.isMessageSender({ person, message }),
+      )
+    ) {
+      throw new Error('User not authorized.');
+    }
+
+    const validTypes = [MessageTypes.TEXT];
+
+    if (!validTypes.includes(message.type)) {
+      throw new Error(
+        `Invalid message type "${message.type}". Message must be a prompt to the AI bot.`,
+      );
+    }
+
+    const chat = await message.getChat();
+    const response = await this.chatBotService.getChatResponse(
+      message.body,
+      0.5,
+      200,
+    );
+
+    await this.safeReplyToMessage({
+      message,
+      client,
+      replyArgs: {
+        chatId: chat.id._serialized,
+        content: response.trim(),
+        options: { sendSeen: false },
+      },
+    });
   }
 }
