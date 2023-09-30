@@ -152,11 +152,13 @@ export class CommandService {
 
   private async annoyRafa({ message, client, chat }) {
     if (
-      this.isMessageSender({ message, person: RAFA })
-      // chat.id._serialized === BOT_STATUS
+      this.isMessageSender({ message, person: RAFA }) &&
+      [SLEEP, BRUXAO].includes(chat.id._serialized) &&
+      message.body
     ) {
       const prompt = `You're an hilarious automatic whatsapp message responder. You love making fun of people.
       You'll respond to a message from Rafa, a Brazilian-Mexican jew.
+      Never compliment him.
       You'll always start with the following sentence: 'hahahahahahahaha isso é engraçado' and then you'll explain why it's funny and finish with a laugh full of haha's as well.
       Always respond in portuguese. You may use one or two spanish words if that makes things funny.
       Don't ever talk about yourself in the response. Here's the message you have to respond to: "${message.body}"`;
