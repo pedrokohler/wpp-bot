@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as throttle from 'lodash.throttle';
 import { AudioTranscriptionService } from 'src/audio-transcription/audio-transcription.service';
+import { ChatBotService } from 'src/chat-bot/chat-bot.service';
 import { TextArmandizerService } from 'src/text-armandizer/text-armandizer.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
 import {
@@ -16,13 +18,14 @@ import {
 } from 'whatsapp-web.js';
 
 export const ME = '553197131929@c.us';
-// const RAFA = '5511916227172@c.us';
+const RAFA = '5511916227172@c.us';
 // const GUGA = '553175559189@c.us';
 // const PENO = '553197011329@c.us';
 // const CHAIRS = '553196295683@c.us';
 // const GIGA = '553198708663@c.us';
 // const CONTADOR_ANCAP = '553192960772@c.us';
 // const COLOMBIA = '553198648535@c.us';
+// const KARINA = '5511953980082@c.us';
 
 export const CO_WORKING = '120363030514613873@g.us';
 const BOT_STATUS = '120363153213988815@g.us';
@@ -45,11 +48,15 @@ const isViewOnce = (message: Message) =>
 
 @Injectable()
 export class CommandService {
+  private throttledAnnoyRafa = throttle(this.annoyRafa.bind(this), 15_000, {
+    trailing: false,
+  });
   private logger = new Logger(CommandService.name);
   constructor(
     private textArmandizerService: TextArmandizerService,
     private youtubeService: YoutubeService,
     private audioTranscriptionService: AudioTranscriptionService,
+    private chatBotService: ChatBotService,
     private configService: ConfigService,
   ) {}
 
@@ -136,8 +143,39 @@ export class CommandService {
         client,
       });
       await this.forwardViewOnceMedia({ message, client });
+      await this.throttledAnnoyRafa({ message, client, chat });
     } catch (e) {
       this.logger.error(e);
+    }
+  }
+
+  private async annoyRafa({ message, client, chat }) {
+    if (
+      this.isMessageSender({ message, person: RAFA })
+      // chat.id._serialized === BOT_STATUS
+    ) {
+      const prompt = `You're an hilarious automatic whatsapp message responder. You love making fun of people.
+      You'll respond to a message from Rafa, a Brazilian-Mexican jew.
+      You'll always start with the following sentence: 'hahahahahahahaha isso é engraçado' and then you'll explain why it's funny and finish with a laugh full of haha's as well.
+      Always respond in portuguese. You may use one or two spanish words if that makes things funny.
+      Don't ever talk about yourself in the response. Here's the message you have to respond to: "${message.body}"`;
+      const botResponse = await this.chatBotService.getChatResponse(
+        prompt,
+        0.7,
+        100,
+      );
+
+      await this.safeReplyToMessage({
+        message,
+        client,
+        replyArgs: {
+          content: botResponse.trim(),
+          chatId: chat.id._serialized,
+          options: {
+            sendSeen: false,
+          },
+        },
+      });
     }
   }
 
@@ -234,11 +272,15 @@ export class CommandService {
       this.logger.log(
         `Couldn't reply to original message. Replying to chat instead.`,
       );
-      await client.sendMessage(
-        chatId,
-        `*AVISO:* A mensagem de ${message.from} que gerou a *resposta automática* abaixo não foi encontrada para que fosse marcada.`,
-      );
-      await client.sendMessage(chatId, content, options);
+      try {
+        await client.sendMessage(
+          chatId,
+          `*AVISO:* A mensagem de ${message.from} que gerou a *resposta automática* abaixo não foi encontrada para que fosse marcada.`,
+        );
+        await client.sendMessage(chatId, content, options);
+      } catch (e) {
+        this.logger.error(e);
+      }
     }
   }
 

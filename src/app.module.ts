@@ -12,6 +12,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RealEstateMonitorModule } from './real-estate-monitor/monitor.module';
 import { YoutubeModule } from './youtube/youtube.module';
+import { ChatBotModule } from './chat-bot/chat-bot.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { YoutubeModule } from './youtube/youtube.module';
       inject: [ConfigService],
     }),
     YoutubeModule,
+    ChatBotModule,
   ],
   controllers: [AppController],
   providers: [AppService, TextArmandizerService, UtilsService],
