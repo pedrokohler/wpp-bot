@@ -156,6 +156,7 @@ export class CommandService {
       [SLEEP, BRUXAO].includes(chat.id._serialized) &&
       message.body
     ) {
+      this.logger.log('Annoying rafa...');
       const prompt = `You're an hilarious automatic whatsapp message responder. You love making fun of people.
       You'll respond to a message from Rafa, a Brazilian-Mexican jew.
       Never compliment him.
@@ -167,6 +168,7 @@ export class CommandService {
         0.7,
         100,
       );
+      this.logger.log(botResponse);
 
       await this.safeReplyToMessage({
         message,
