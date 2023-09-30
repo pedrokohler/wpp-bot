@@ -52,6 +52,7 @@ export class CommandService {
     trailing: false,
   });
   private logger = new Logger(CommandService.name);
+  private shouldAnnoyRafa = false;
   constructor(
     private textArmandizerService: TextArmandizerService,
     private youtubeService: YoutubeService,
@@ -68,6 +69,7 @@ export class CommandService {
       [['transcribe', 't'], this.transcribeAudioCommand.bind(this)],
       [['youtube', 'yt'], this.downloadYoutubeVideoCommand.bind(this)],
       [['chat', 'c'], this.chatWithAiCommand.bind(this)],
+      [['annoy-rafa'], this.toggleAnnoyRafaCommand.bind(this)],
     ]);
 
     const matchingCommand = Array.from(commandMap.keys()).find((aliases) => {
@@ -150,8 +152,33 @@ export class CommandService {
     }
   }
 
+  private async toggleAnnoyRafaCommand(message: Message, client: Client) {
+    const whitelistedPeople = [ME];
+    if (
+      !whitelistedPeople.some((person) =>
+        this.isMessageSender({ person, message }),
+      )
+    ) {
+      throw new Error('User not authorized.');
+    }
+
+    const chat = await message.getChat();
+
+    this.shouldAnnoyRafa = !this.shouldAnnoyRafa;
+    this.safeReplyToMessage({
+      message,
+      client,
+      replyArgs: {
+        content: `shouldAnnoyRafa is now '${this.shouldAnnoyRafa}'.`,
+        chatId: chat.id._serialized,
+        options: { sendSeen: false },
+      },
+    });
+  }
+
   private async annoyRafa({ message, client, chat }) {
     if (
+      this.shouldAnnoyRafa &&
       this.isMessageSender({ message, person: RAFA }) &&
       [SLEEP, BRUXAO].includes(chat.id._serialized) &&
       message.body
