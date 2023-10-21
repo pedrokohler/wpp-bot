@@ -26,6 +26,7 @@ const RAFA = '5511916227172@c.us';
 // const CONTADOR_ANCAP = '553192960772@c.us';
 // const COLOMBIA = '553198648535@c.us';
 // const KARINA = '5511953980082@c.us';
+export const BOT_APS = '120363175490483503@g.us';
 
 export const CO_WORKING = '120363030514613873@g.us';
 const BOT_STATUS = '120363153213988815@g.us';

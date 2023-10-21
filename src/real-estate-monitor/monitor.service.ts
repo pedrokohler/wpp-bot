@@ -9,7 +9,7 @@ import {
   realEstateClientBaseUrl,
 } from './constants';
 import { WppClientService } from 'src/wpp-client/wpp-client.service';
-import { ME, SLEEP } from 'src/commands/command.service';
+import { BOT_APS } from 'src/commands/command.service';
 
 @Injectable()
 export class RealEstateMonitorService {
@@ -55,7 +55,7 @@ export class RealEstateMonitorService {
 
   private async notifyEmail({ title, body }) {
     try {
-      this.emailService.sendEmail({
+      await this.emailService.sendEmail({
         title,
         body,
       });
@@ -67,9 +67,9 @@ export class RealEstateMonitorService {
   }
 
   private async notifyAll(newOpportunities) {
-    const notificationTitle = `${
-      newOpportunities.length
-    } nova(s) oportunidade(s) encontrada(s) - ${Date.now()}`;
+    // const notificationTitle = `${
+    //   newOpportunities.length
+    // } nova(s) oportunidade(s) encontrada(s) - ${Date.now()}`;
 
     const notificationBody = newOpportunities
       .reduce(
@@ -81,7 +81,7 @@ export class RealEstateMonitorService {
 
     this.logger.log('Sending notifications...');
     await Promise.any([
-      ...[SLEEP, ME].map(async (chatId) => {
+      ...[BOT_APS].map(async (chatId) => {
         try {
           await this.wppService.sendMessage({
             chatId,
@@ -95,10 +95,10 @@ export class RealEstateMonitorService {
           throw e;
         }
       }),
-      this.notifyEmail({
-        title: notificationTitle,
-        body: `        ${notificationBody}`,
-      }),
+      // this.notifyEmail({
+      //   title: notificationTitle,
+      //   body: `        ${notificationBody}`,
+      // }),
     ]);
   }
 
@@ -159,10 +159,10 @@ export class RealEstateMonitorService {
       'Sion',
       'Carmo',
       'Santo Antônio',
-      'Santa Efigênia',
-      'Cidade Nova',
-      'Floresta',
-      'Prado',
+      // 'Santa Efigênia',
+      // 'Cidade Nova',
+      // 'Floresta',
+      // 'Prado',
     ];
 
     const updatedBlocklist = [...blocklist];
@@ -224,13 +224,13 @@ export class RealEstateMonitorService {
             min_area: 70,
           },
           cost: {
-            cost_type: 'rent',
-            max_value: 4600,
+            cost_type: 'total_cost',
+            max_value: 4000,
             min_value: 1000,
           },
           min_bathrooms: 2,
-          min_bedrooms: 2,
-          min_parking_spaces: 1,
+          // min_bedrooms: 2,
+          // min_parking_spaces: 1,
           country_code: 'BR',
           keyword_match: [
             `neighborhood:${neighborhood}`,
